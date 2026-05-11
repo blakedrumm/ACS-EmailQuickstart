@@ -1,0 +1,1050 @@
+﻿/*
+ * -----------------------------------------------------------------------------
+ *  File Name   : Program.cs
+ *  Description : Sample console application that sends a branded welcome email
+ *                using Azure Communication Services Email. Supports both
+ *                interactive (Ctrl+R to resend, Enter to exit) and
+ *                non-interactive (Task Scheduler / service) execution modes.
+ *
+ *  Author      : Blake Drumm (blakedrumm@microsoft.com)
+ *  Created     : November 18th, 2025
+ *  Modified    : November 19th, 2025
+ *  Version     : 1.0.0
+ *
+ *  Notes       : 
+ *    - Expects the ACS connection string in the
+ *      COMMUNICATION_SERVICES_CONNECTION_STRING environment variable.
+ *    - Uses HTML + plain text content and logs status/polling information
+ *      with UTC timestamps and elapsed time.
+ * -----------------------------------------------------------------------------
+ */
+
+// See https://aka.ms/new-console-template for more information
+#nullable enable
+
+using Azure;
+using Azure.Communication.Email;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
+
+namespace SendEmail
+{
+    internal class Program
+    {
+        // Used to compute relative timestamps for the Log() method.
+        private static DateTime _startUtc;
+
+        static async Task Main(string[] args)
+        {
+            var options = ParseOptions(args);
+
+            // Determine whether we're running in an interactive console.
+            bool interactive = IsInteractive(args);
+
+            if (interactive)
+            {
+                // Treat Ctrl+C as an input key, not as a process-kill signal.
+                // This allows us to use Ctrl+R for restart logic without killing the app.
+                Console.TreatControlCAsInput = true;
+                Log("[MODE] Interactive console detected. Ctrl+R = resend, Enter = exit.");
+            }
+            else
+            {
+                Log("[MODE] Non-interactive detected (Task Scheduler / service / redirected I/O).");
+            }
+
+            // -----------------------------------------------------------------
+            // Non-interactive: run once and exit (no waiting for key input).
+            // -----------------------------------------------------------------
+            if (!interactive)
+            {
+                await RunConfiguredSendsAsync(options);
+                Log("[EXIT] Non-interactive run finished. Exiting application.");
+                return;
+            }
+
+            // -----------------------------------------------------------------
+            // Interactive mode: allow repeated runs with Ctrl+R.
+            // -----------------------------------------------------------------
+            while (true)
+            {
+                // Run the configured number of sends for this cycle.
+                await RunConfiguredSendsAsync(options);
+
+                // After one full run, wait for user input to either exit or restart.
+                Log("[END] Press Enter to exit, or press Ctrl+R to resend.");
+                while (true)
+                {
+                    // Read a key without echoing to the console.
+                    var key = Console.ReadKey(intercept: true);
+
+                    bool ctrlR = key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Control);
+                    bool enter = key.Key == ConsoleKey.Enter && key.Modifiers == 0;
+
+                    if (ctrlR)
+                    {
+                        Log("[RESTART] Ctrl+R detected. Restarting send workflow...");
+                        // Break inner loop -> outer while(true) repeats RunOnceAsync().
+                        break;
+                    }
+
+                    if (enter)
+                    {
+                        Log("[EXIT] Enter pressed. Exiting application.");
+                        return; // End the process.
+                    }
+
+                    // Ignore all other keys.
+                }
+            }
+
+        private static async Task RunConfiguredSendsAsync(Options options)
+        {
+            for (int iteration = 1; iteration <= options.RepeatCount; iteration++)
+            {
+                _startUtc = DateTime.UtcNow;
+
+                if (options.RepeatCount > 1)
+                {
+                    Log($"[BATCH] Starting send {iteration} of {options.RepeatCount}.");
+                }
+
+                await RunOnceAsync(options, iteration, options.RepeatCount);
+
+                if (options.RepeatCount > 1)
+                {
+                    Log($"[BATCH] Finished send {iteration} of {options.RepeatCount}.");
+                }
+            }
+        }
+        }
+
+        /// <summary>
+        /// Executes one full send workflow:
+        ///  - Renders the ASCII Azure banner
+        ///  - Reads config (connection string, addresses)
+        ///  - Builds HTML + plain text email content
+        ///  - Sends email using ACS Email
+        ///  - Polls for operation completion with a hard timeout
+        /// </summary>
+        private static async Task RunOnceAsync(Options options, int iteration = 1, int totalRuns = 1)
+        {
+            // --------------------------------------------------------------------
+            // Console banner (ASCII Azure "logo")
+            // --------------------------------------------------------------------
+            Console.WriteLine("----------------------------------------------------------------------------");
+            Console.WriteLine("|                                                                          |");
+            Console.WriteLine("|                                   **                                     |");
+            Console.WriteLine("|                                **** **                                   |");
+            Console.WriteLine("|                              ***** ****                                  |");
+            Console.WriteLine("|                            ******  *****                                 |");
+            Console.WriteLine("|                          *******  *******                                |");
+            Console.WriteLine("|                        ********  *********                               |");
+            Console.WriteLine("|                       ********  ***********                              |");
+            Console.WriteLine("|                      ********   ************                             |");
+            Console.WriteLine("|                     ********     ************                            |");
+            Console.WriteLine("|                    ********       *************                          |");
+            Console.WriteLine("|                   ********          ************                         |");
+            Console.WriteLine("|                  *********           ************                        |");
+            Console.WriteLine("|                **********              ***********                       |");
+            Console.WriteLine("|                                                                          |");
+            Console.WriteLine("|                          M I C R O S O F T                               |");
+            Console.WriteLine("|         A Z U R E  C O M M U N I C A T I O N  S E R V I C E S            |");
+            Console.WriteLine("|                                                                          |");
+            Console.WriteLine("----------------------------------------------------------------------------");
+
+            var runLabel = totalRuns > 1
+                ? $" (email {iteration} of {totalRuns})"
+                : string.Empty;
+
+            Log($"[START] Send workflow started{runLabel}.");
+
+            // --------------------------------------------------------------------
+            // ACS Email connection string from environment variable
+            // --------------------------------------------------------------------
+            string? connectionString = Environment.GetEnvironmentVariable("COMMUNICATION_SERVICES_CONNECTION_STRING");
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                Log("[ERROR] ACS connection string not found in COMMUNICATION_SERVICES_CONNECTION_STRING.");
+                Log("        Set the environment variable and re-run.");
+                return;
+            }
+
+            Log("[INFO] ACS connection string was retrieved successfully.");
+
+            // --------------------------------------------------------------------
+            // Email configuration (prefer CLI args, fallback to environment)
+            // --------------------------------------------------------------------
+            var subject = options.Subject;
+
+            // Sender must be a verified email identity on the ACS resource.
+            var sender = options.Sender;
+
+            // EmailMessage = envelope (From, To, Content, Headers, etc.)
+            var recipients = BuildRecipients(options);
+
+            // Reply-To addresses.
+            var replyToAddresses = options.ReplyTo;
+
+            // URL for the "View this email in your browser" link.
+            var viewInBrowserUrl = options.ViewInBrowserUrl;
+
+            // A display string we can use inside the email body.
+            // If Reply-To is not set, keep this null so we can omit related UI.
+            var replyToDisplay = replyToAddresses.Length > 0
+                ? string.Join(", ", replyToAddresses)
+                : null;
+
+            // Tracking Id used for both header and body.
+            var trackingId = Guid.NewGuid().ToString();
+
+            // --------------------------------------------------------------------
+            // Header configuration (importance, opt-out, reserved ACS flags, etc.)
+            // --------------------------------------------------------------------
+            // Importance: "high", "normal", or "low".
+            var importance = "normal";
+
+            // Request a read receipt via standard header. Many providers ignore this.
+            bool requestReadReceipt = false;
+
+            // Correlation / diagnostics headers.
+            var environmentTag = "prod";
+            var campaignName = "acs-welcome-sample";
+            var mailerId = "AzureCommSample/1.0.0";
+
+            // Optional unsubscribe metadata (marketing / bulk scenarios).
+            // Leave null/empty to omit these headers.
+            string? listUnsubscribeUrl = null;     // e.g. $"https://blakedrumm.com/unsubscribe?tid={trackingId}";
+            string? listUnsubscribeMailto = null;  // e.g. "mailto:unsubscribe@blakedrumm.com?subject=unsubscribe";
+
+            // Reserved ACS custom headers (all OFF by default so behavior is unchanged
+            // unless you explicitly enable them):
+            //
+            //  - x-ms-acsemail-ignore-duplicate-content-id
+            //  - x-ms-acsemail-suppress-invalid-attachment
+            //  - x-ms-acsemail-validate-message-id
+            //
+            bool ignoreDuplicateContentId = false;
+            bool suppressInvalidAttachment = false;
+            bool validateMessageId = false;
+
+            // Optional explicit Internet Message ID (only used when validateMessageId = true).
+            // Must follow RFC 2822 format, e.g. "<guid@domain.com>".
+            string? explicitMessageId = validateMessageId
+                ? $"<{trackingId}@example.com>"
+                : null;
+
+            // --------------------------------------------------------------------
+            // HTML body of the email (TEMPLATE)
+            // We use placeholder tokens which will be replaced at runtime:
+            //  - ##REPLY_TO_EMAILS##      -> replyToDisplay
+            //  - ##VIEW_IN_BROWSER_URL##  -> viewInBrowserUrl
+            //  - ##TRACKING_ID##          -> trackingId
+            // --------------------------------------------------------------------
+            var htmlTemplate = @"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+  <meta charset=""UTF-8"" />
+  <meta name=""viewport"" content=""width=device-width,initial-scale=1"" />
+  <title>Welcome</title>
+
+  <!-- ==========================================================
+       CSS Styles: Mobile adjustments + Dark mode compatibility
+       ========================================================== -->
+  <style>
+    /* Mobile responsive scaling */
+    @media only screen and (max-width:600px){
+      .container{width:100% !important;}
+      .hero-text{font-size:22px !important;}
+      .cta-button{padding:14px 26px !important;}
+    }
+
+    /* Dark mode (safe for Outlook, Gmail, iOS Mail) */
+    @media (prefers-color-scheme: dark){
+      body{background:#111111 !important;color:#ffffff !important;}
+      .container{
+        background:#1e1e1e !important;
+        color:#ffffff !important;
+        box-shadow:0 1px 4px rgba(0,0,0,0.6) !important;
+      }
+      .hero-text{color:#ffffff !important;}
+      .info-card{
+        background:#243447 !important;
+        border-color:#3b4a60 !important;
+        color:#ffffff !important;
+        box-shadow:0 1px 4px rgba(0,0,0,0.5) !important;
+      }
+      a{color:#4aa3ff !important;}
+    }
+  </style>
+</head>
+
+<body style=""margin:0;padding:0;background:#f5f7fa;font-family:Segoe UI, Arial, sans-serif;"">
+
+  <!-- ==========================================================
+       Preheader text: Hidden content shown in inbox preview
+       ========================================================== -->
+  <div style=""display:none!important;visibility:hidden;opacity:0;color:transparent;
+              height:0;width:0;overflow:hidden;mso-hide:all;"">
+    Welcome to Azure Communication Service Email APIs – your email was sent successfully.
+  </div>
+
+  <!-- ==========================================================
+       Outer wrapper table (full width)
+       ========================================================== -->
+  <table role=""presentation"" width=""100%"" cellspacing=""0"" cellpadding=""0"" border=""0"" style=""background:#f5f7fa;"">
+    <tr>
+      <td align=""center"" style=""padding:30px 10px;"">
+
+        <!-- ======================================================
+             Main container (600px fixed, centered)
+             ====================================================== -->
+        <table role=""presentation"" class=""container"" width=""600"" cellspacing=""0"" cellpadding=""0"" border=""0"" 
+               style=""width:600px;max-width:600px;background:#ffffff;border-radius:10px;
+                      overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.10);"">
+
+          <!-- ====================================================
+               Header section with Azure branding
+               ==================================================== -->
+          <tr>
+            <td style=""background:#004578;padding:28px 32px;text-align:center;"">
+              <img src=""https://blakedrumm.com/assets/img/Microsoft_Azure_Logo.png""
+                   alt=""Microsoft Azure logo""
+                   width=""187"" height=""54""
+                   style=""display:block;margin:0 auto 12px;"" />
+
+              <div class=""hero-text"" style=""color:#ffffff;font-size:26px;font-weight:600;line-height:1.3;"">
+                Welcome to Azure Communication Service Email APIs
+              </div>
+            </td>
+          </tr>
+
+          <!-- ====================================================
+               Optional: View in browser link (top of content)
+               ==================================================== -->
+          <tr>
+            <td style=""padding:16px 32px 0 32px;text-align:right;font-size:11px;color:#7a8693;"">
+              <a href=""##VIEW_IN_BROWSER_URL##"" target=""_blank"" style=""color:#0067b8;text-decoration:none;"">
+                View this email in your browser
+              </a>
+            </td>
+          </tr>
+
+          <!-- ====================================================
+               Security verification bar (informational)
+               Extra top padding to create breathing room
+               ==================================================== -->
+          <tr>
+            <td style=""padding:18px 32px 0 32px;"">
+              <table role=""presentation"" width=""100%"" cellspacing=""0"" cellpadding=""0"" border=""0""
+                     style=""background:#e6f3ff;border-radius:6px;"">
+                <tr>
+                  <td style=""padding:10px 14px;font-size:13px;color:#005a9e;"">
+                    <!-- This line gives users confidence the message is legitimate -->
+                    This message was sent securely via Azure Communication Services.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ====================================================
+               Intro text section
+               ==================================================== -->
+          <tr>
+            <td style=""padding:22px 32px 12px 32px;color:#333;font-size:15px;line-height:1.55;"">
+              <p style=""margin:0 0 14px 0;"">Hello,</p>
+              <p style=""margin:0 0 14px 0;"">
+                You have successfully triggered an email using the Azure Communication Service Email SDK for .NET.
+                Below are key capabilities illustrated with lightweight images.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ====================================================
+               Feature cards (3 columns, softer radius & shadow)
+               ==================================================== -->
+          <tr>
+            <td style=""padding:8px 20px 12px 20px;"">
+              <table role=""presentation"" width=""100%"" cellspacing=""0"" cellpadding=""0""
+                     style=""border-collapse:collapse;"">
+                <tr>
+
+                  <!-- Feature Card 1 -->
+                  <td style=""width:33.33%;padding:12px;"">
+                    <table role=""presentation"" width=""100%"" class=""info-card""
+                           style=""background:#f0f6ff;border:1px solid #d6e6f7;border-radius:8px;
+                                  box-shadow:0 1px 4px rgba(0,0,0,0.08);"">
+                      <tr>
+                        <td align=""center"" style=""padding:18px 14px 10px 14px;"">
+                          <img src=""https://blakedrumm.com/assets/img/CSS_code_on_a_screen_unsplash.png""
+                               alt=""API and coding symbol""
+                               width=""72"" height=""72""
+                               style=""display:block;margin:0 auto;"" />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align=""center"" style=""padding:0 14px 18px 14px;font-size:13px;color:#0a3c6d;"">
+                          <strong>Flexible APIs</strong><br />Integrate email flows into existing services.
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+
+                  <!-- Feature Card 2 -->
+                  <td style=""width:33.33%;padding:12px;"">
+                    <table role=""presentation"" width=""100%"" class=""info-card""
+                           style=""background:#f0f6ff;border:1px solid #d6e6f7;border-radius:8px;
+                                  box-shadow:0 1px 4px rgba(0,0,0,0.08);"">
+                      <tr>
+                        <td align=""center"" style=""padding:18px 14px 10px 14px;"">
+                          <img src=""https://blakedrumm.com/assets/img/BIDSSLines.png""
+                               alt=""Analytics and tracking chart icon""
+                               width=""72"" height=""72""
+                               style=""display:block;margin:0 auto;"" />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align=""center"" style=""padding:0 14px 18px 14px;font-size:13px;color:#0a3c6d;"">
+                          <strong>Operation Tracking</strong><br />Monitor send status programmatically.
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+
+                  <!-- Feature Card 3 -->
+                  <td style=""width:33.33%;padding:12px;"">
+                    <table role=""presentation"" width=""100%"" class=""info-card""
+                           style=""background:#f0f6ff;border:1px solid #d6e6f7;border-radius:8px;
+                                  box-shadow:0 1px 4px rgba(0,0,0,0.08);"">
+                      <tr>
+                        <td align=""center"" style=""padding:18px 14px 10px 14px;"">
+                          <img src=""https://blakedrumm.com/assets/img/Antu_security-high.png""
+                               alt=""Security shield icon""
+                               width=""72"" height=""72""
+                               style=""display:block;margin:0 auto;"" />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align=""center"" style=""padding:0 14px 18px 14px;font-size:13px;color:#0a3c6d;"">
+                          <strong>Secure Delivery</strong><br />Reliability backed by Azure infrastructure.
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ====================================================
+               Call-to-action button (bulletproof for Outlook)
+               ==================================================== -->
+          <tr>
+            <td style=""padding:14px 32px 8px 32px;text-align:center;"">
+              <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" align=""center"">
+                <tr>
+                  <td bgcolor=""#0067b8"" style=""border-radius:4px;"">
+                    <a href=""https://learn.microsoft.com/azure/communication-services/?WT.mc_id=email""
+                       style=""display:inline-block;padding:16px 38px;font-size:15px;font-weight:600;
+                              font-family:Segoe UI, Arial, sans-serif;color:#ffffff;text-decoration:none;
+                              mso-line-height-rule:exactly;""
+                       target=""_blank"" rel=""noopener"">
+                      Explore Documentation
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style=""padding:26px 32px 0 32px;"">
+              <hr style=""border:none;height:1px;background:#e2e6ea;margin:0;"" />
+            </td>
+          </tr>
+
+            <!-- ====================================================
+               Social / helpful links section
+               ==================================================== -->
+          <tr>
+            <td style=""padding:18px 32px 0 32px;text-align:center;"">
+              <p style=""margin:0 0 8px 0;font-size:12px;color:#666;"">
+                Learn more and stay connected:
+              </p>
+              <p style=""margin:0;font-size:12px;color:#666;"">
+                <a href=""https://learn.microsoft.com/azure/communication-services/""
+                   target=""_blank"" style=""color:#0067b8;text-decoration:none;"">Azure Communication Services Docs</a>
+                &nbsp;•&nbsp;
+                <a href=""https://techcommunity.microsoft.com/""
+                   target=""_blank"" style=""color:#0067b8;text-decoration:none;"">Microsoft Tech Community</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- ====================================================
+               Footer + legal text
+               ==================================================== -->
+          <tr>
+            <td style=""padding:22px 32px 28px 32px;color:#666;font-size:12px;line-height:1.4;"">
+
+              <!-- Powered by line -->
+              <p style=""margin:16px 0 8px 0;font-size:11px;color:#88939c;text-align:center;"">
+                Powered by Azure Communication Services
+              </p>
+
+              <!-- Reply routing note; omitted when Reply-To is not configured -->
+              ##REPLY_TO_BLOCK##
+
+              <!-- Not expected disclaimer -->
+              <p style=""margin:0 0 8px 0;"">
+                If you were not expecting this email, you may safely ignore or delete it.
+              </p>
+
+              <!-- Copyright -->
+              <p style=""margin:0;font-size:11px;color:#88939c;"">
+                &copy; " + DateTime.UtcNow.Year + @" Your Organization. All rights reserved.
+              </p>
+
+              <!-- Image attribution -->
+              <p style=""margin:4px 0 0 0;font-size:10px;color:#a0a8b1;"">
+                Images: Public domain / CC0 (Wikimedia Commons).
+              </p>
+
+              <!-- Tracking Id for correlation -->
+              <p style=""margin:4px 0 0 0;font-size:10px;color:#a0a8b1;"">
+                Tracking Id: <span>##TRACKING_ID##</span>
+              </p>
+
+            </td>
+          </tr>
+
+        </table>
+        <!-- End main container -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
+";
+
+            var replyToBlock = !string.IsNullOrWhiteSpace(replyToDisplay)
+                ? $@"<p style=""margin:8px 0 8px 0;"">\n" +
+                  $@"                Replies will be directed to <strong>{replyToDisplay}</strong>.\n" +
+                  $@"                Please do not reply to the sender address directly.\n" +
+                  $@"              </p>"
+                : string.Empty;
+
+            // Replace placeholders with actual values.
+            htmlTemplate = htmlTemplate
+                .Replace("##REPLY_TO_BLOCK##", replyToBlock)
+                .Replace("##VIEW_IN_BROWSER_URL##", viewInBrowserUrl)
+                .Replace("##TRACKING_ID##", trackingId);
+
+            var htmlContent = htmlTemplate;
+
+            if (!ValidateConfiguration(sender, recipients, replyToAddresses))
+            {
+                return;
+            }
+
+            var (attachments, attachmentDisplay) = await LoadAttachmentsAsync(options.Attachments);
+
+            // --------------------------------------------------------------------
+            // Build the EmailClient (ACS Email SDK entry point)
+            // --------------------------------------------------------------------
+            var emailClient = new EmailClient(connectionString);
+
+            // Build email content: HTML + plain-text fallback.
+            var content = new EmailContent(subject)
+            {
+                Html = htmlContent,
+                PlainText = $"Welcome! Your Azure Communication Services email sample was delivered. " +
+                            $"Features: Flexible APIs, Tracking, Secure Delivery." +
+                            (!string.IsNullOrWhiteSpace(replyToDisplay)
+                                ? $" Replies will be directed to: {replyToDisplay}."
+                                : string.Empty) +
+                            $" Tracking Id: {trackingId}."
+            };
+
+            var emailMessage = new EmailMessage(sender, recipients, content);
+
+            foreach (var attachment in attachments)
+            {
+                emailMessage.Attachments.Add(attachment);
+            }
+
+            // Set Reply-To list using the same addresses used in the body.
+            foreach (var addr in replyToAddresses)
+            {
+                emailMessage.ReplyTo.Add(new EmailAddress(addr));
+            }
+
+            // Custom headers for tracking/correlation.
+            emailMessage.Headers.Add("X-Tracking-ID", trackingId);
+            emailMessage.Headers.Add("X-Template-Version", "v1.1");
+
+            // Correlation / diagnostics headers.
+            emailMessage.Headers.Add("X-Environment", environmentTag);
+            emailMessage.Headers.Add("X-Campaign", campaignName);
+            emailMessage.Headers.Add("X-Mailer", mailerId);
+
+            // Importance headers (x-priority / x-msmail-priority).
+            switch (importance.ToLowerInvariant())
+            {
+                case "high":
+                    emailMessage.Headers.Add("X-Priority", "1");
+                    emailMessage.Headers.Add("X-MSMail-Priority", "High");
+                    break;
+
+                case "low":
+                    emailMessage.Headers.Add("X-Priority", "5");
+                    emailMessage.Headers.Add("X-MSMail-Priority", "Low");
+                    break;
+
+                default:
+                    emailMessage.Headers.Add("X-Priority", "3");
+                    emailMessage.Headers.Add("X-MSMail-Priority", "Normal");
+                    break;
+            }
+
+            // Optional read-receipt request.
+            if (requestReadReceipt && replyToAddresses.Length > 0)
+            {
+                emailMessage.Headers.Add("Disposition-Notification-To", replyToAddresses[0]);
+            }
+
+            // Optional List-Unsubscribe / List-Unsubscribe-Post headers.
+            string? listUnsubscribeHeader = null;
+
+            if (!string.IsNullOrWhiteSpace(listUnsubscribeUrl) &&
+                !string.IsNullOrWhiteSpace(listUnsubscribeMailto))
+            {
+                listUnsubscribeHeader = $"<{listUnsubscribeUrl}>, <{listUnsubscribeMailto}>";
+            }
+            else if (!string.IsNullOrWhiteSpace(listUnsubscribeUrl))
+            {
+                listUnsubscribeHeader = $"<{listUnsubscribeUrl}>";
+            }
+            else if (!string.IsNullOrWhiteSpace(listUnsubscribeMailto))
+            {
+                listUnsubscribeHeader = $"<{listUnsubscribeMailto}>";
+            }
+
+            if (!string.IsNullOrWhiteSpace(listUnsubscribeHeader))
+            {
+                emailMessage.Headers.Add("List-Unsubscribe", listUnsubscribeHeader);
+                emailMessage.Headers.Add("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
+            }
+
+            // Reserved ACS headers (only added when explicitly enabled).
+            if (ignoreDuplicateContentId)
+            {
+                emailMessage.Headers.Add("x-ms-acsemail-ignore-duplicate-content-id", "true");
+            }
+
+            if (suppressInvalidAttachment)
+            {
+                emailMessage.Headers.Add("x-ms-acsemail-suppress-invalid-attachment", "true");
+            }
+
+            if (validateMessageId && !string.IsNullOrWhiteSpace(explicitMessageId))
+            {
+                emailMessage.Headers.Add("Message-Id", explicitMessageId);
+                emailMessage.Headers.Add("x-ms-acsemail-validate-message-id", "true");
+            }
+
+            // --------------------------------------------------------------------
+            // Pre-send logging – shows exactly what we are about to send.
+            // Include CC/BCC only when present.
+            // --------------------------------------------------------------------
+            var toDisplay = string.Join(
+                ", ",
+                emailMessage.Recipients.To?.Select(r => r.Address) ?? Enumerable.Empty<string>());
+
+            var ccDisplay = string.Join(
+                ", ",
+                emailMessage.Recipients.CC?.Select(r => r.Address) ?? Enumerable.Empty<string>());
+
+            var bccDisplay = string.Join(
+                ", ",
+                emailMessage.Recipients.BCC?.Select(r => r.Address) ?? Enumerable.Empty<string>());
+
+            var ccLine = string.IsNullOrWhiteSpace(ccDisplay) ? string.Empty : $"\n                Cc          : {ccDisplay}";
+            var bccLine = string.IsNullOrWhiteSpace(bccDisplay) ? string.Empty : $"\n                Bcc         : {bccDisplay}";
+
+            Log($@"[INFO] Sending email
+                From        : {sender}
+                To          : {toDisplay}{ccLine}{bccLine}
+                Reply-To    : {string.Join(", ", emailMessage.ReplyTo.Select(r => r.Address))}
+                Attachments : {(attachmentDisplay.Length > 0 ? string.Join(", ", attachmentDisplay) : "(none)")}
+                Subject     : {subject}
+                Tracking Id : {emailMessage.Headers["X-Tracking-ID"]}");
+
+            Log("[INFO] Custom headers: " +
+                string.Join(", ", emailMessage.Headers.Select(kvp => $"{kvp.Key}={kvp.Value}")));
+
+            // --------------------------------------------------------------------
+            // Send email + manual, bounded polling (instead of WaitUntil.Completed)
+            // --------------------------------------------------------------------
+            if (options.DryRun)
+            {
+                Log("[DRY-RUN] --dry-run specified. Skipping send.");
+                return;
+            }
+
+            var waitMode = WaitUntil.Started; // Don't block indefinitely inside SDK.
+            Log($"[SEND] Initiating send ({waitMode})...");
+
+            try
+            {
+                EmailSendOperation operation = await emailClient.SendAsync(waitMode, emailMessage);
+
+                Log($"[SEND] Operation started. Id={operation.Id}");
+
+                var pollInterval = options.PollInterval;
+                var maxPollTime = options.MaxPollTime;
+                var pollCount = 0;
+                var pollStartUtc = DateTime.UtcNow;
+
+                Log($"[POLL] Polling every {pollInterval.TotalMilliseconds} ms, up to {maxPollTime.TotalSeconds} s...");
+
+                while (true)
+                {
+                    pollCount++;
+
+                    await operation.UpdateStatusAsync();
+
+                    bool hasCompleted = operation.HasCompleted;
+                    bool hasValue = operation.HasValue;
+                    string serviceStatus = hasValue ? operation.Value.Status.ToString() : "NoValueYet";
+
+                    if (!hasCompleted)
+                    {
+                        Log($"[POLL] #{pollCount} - Running");
+                    }
+                    else
+                    {
+                        var totalSendSeconds = (DateTime.UtcNow - pollStartUtc).TotalSeconds;
+                        Log($"[POLL] #{pollCount} - Completed ({serviceStatus}) (took {totalSendSeconds:F3}s)");
+                        Log("[DONE] Operation reported completion.");
+                        break;
+                    }
+
+                    var elapsedPollTime = DateTime.UtcNow - pollStartUtc;
+                    if (elapsedPollTime > maxPollTime)
+                    {
+                        Log($"[WARN] Polling timed out after {elapsedPollTime.TotalSeconds:F1}s. Operation may still complete server-side.");
+                        break;
+                    }
+
+                    await Task.Delay(pollInterval);
+                }
+
+                if (operation.HasValue)
+                {
+                    Log($"[STATUS] Final email operation status (as observed) = {operation.Value.Status}");
+                }
+                else
+                {
+                    Log("[WARN] Operation finished polling window without an operation value.");
+                }
+
+                Log($"[INFO] Operation Id = {operation.Id}");
+            }
+            catch (RequestFailedException ex)
+            {
+                Log($"[ERROR] Send failed. Code={ex.ErrorCode} Message={ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[ERROR] Unexpected exception: {ex.GetType().Name} - {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Writes a timestamped log message with elapsed seconds since the start of the run.
+        /// </summary>
+        private static void Log(string message)
+        {
+            var now = DateTime.UtcNow;
+            var elapsed = now - _startUtc;
+            Console.WriteLine($"[{now:yyyy-MM-dd HH:mm:ss.fff} UTC | +{elapsed.TotalSeconds,8:F3}s] {message}");
+        }
+
+        /// <summary>
+        /// Determines whether the app should behave in interactive mode.
+        /// </summary>
+        private static bool IsInteractive(string[] args)
+        {
+            static void ShowHelp()
+            {
+                Console.WriteLine("Azure Communication Services Email Sample");
+                Console.WriteLine();
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  EmailQuickstart.exe [options]");
+                Console.WriteLine();
+                Console.WriteLine("Options:");
+                Console.WriteLine("  --interactive, -i            Force interactive mode (prompts for Ctrl+R / Enter).");
+                Console.WriteLine("  --noninteractive, -ni, -n    Run once and exit; suitable for Task Scheduler, etc.");
+                Console.WriteLine("  --non-interactive            Alias of --noninteractive.");
+                Console.WriteLine("  --sender <email>             Sender address (env: ACS_SENDER). Required to send.");
+                Console.WriteLine("  --to <emails>                Comma/semicolon separated To list (env: ACS_TO). Required to send.");
+                Console.WriteLine("  --cc <emails>                Comma/semicolon separated Cc list (env: ACS_CC).");
+                Console.WriteLine("  --bcc <emails>               Comma/semicolon separated Bcc list (env: ACS_BCC).");
+                Console.WriteLine("  --reply-to <emails>          Comma/semicolon separated Reply-To list (env: ACS_REPLY_TO).");
+                Console.WriteLine("  --attach <paths>             Comma/semicolon separated attachment file paths (env: ACS_ATTACH).");
+                Console.WriteLine("  --subject <text>             Email subject (env: ACS_SUBJECT)." );
+                Console.WriteLine("  --view-url <url>             View-in-browser URL (env: ACS_VIEW_IN_BROWSER_URL)." );
+                Console.WriteLine("  --poll-interval-ms <int>     Poll interval in milliseconds (env: ACS_POLL_INTERVAL_MS, default 500)." );
+                Console.WriteLine("  --max-poll-seconds <int>     Poll timeout in seconds (env: ACS_MAX_POLL_SECONDS, default 60)." );
+                Console.WriteLine("  --repeat, -r <int>           Repeat the send workflow N times (env: ACS_REPEAT_COUNT, default 1).");
+                Console.WriteLine("  --dry-run                    Build and log the message without sending.");
+                Console.WriteLine("  --help, -h, /?               Show this help and exit.");
+            }
+
+            var normalizedArgs = args
+                .Where(a => !string.IsNullOrWhiteSpace(a))
+                .Select(a => a.Trim())
+                .ToArray();
+
+            if (normalizedArgs.Any(a =>
+                    string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a, "/?", StringComparison.OrdinalIgnoreCase)))
+            {
+                ShowHelp();
+                Environment.Exit(0);
+            }
+
+            if (normalizedArgs.Any(a =>
+                    string.Equals(a, "--noninteractive", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a, "--non-interactive", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a, "-ni", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a, "-n", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            if (normalizedArgs.Any(a =>
+                    string.Equals(a, "--interactive", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a, "-i", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            try
+            {
+                return Environment.UserInteractive && !Console.IsInputRedirected;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private sealed record Options(
+            string Sender,
+            string[] To,
+            string[] Cc,
+            string[] Bcc,
+            string[] ReplyTo,
+            string[] Attachments,
+            string Subject,
+            string ViewInBrowserUrl,
+            TimeSpan PollInterval,
+            TimeSpan MaxPollTime,
+            int RepeatCount,
+            bool DryRun);
+
+        private static Options ParseOptions(string[] args)
+        {
+            var normalizedArgs = args
+                .Where(a => !string.IsNullOrWhiteSpace(a))
+                .Select(a => a.Trim())
+                .ToArray();
+
+            string? GetEnv(string name) => Environment.GetEnvironmentVariable(name);
+
+            string? GetArgValue(string longName)
+            {
+                for (int i = 0; i < normalizedArgs.Length; i++)
+                {
+                    var a = normalizedArgs[i];
+                    if (!string.Equals(a, longName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (i + 1 >= normalizedArgs.Length)
+                    {
+                        return null;
+                    }
+
+                    return normalizedArgs[i + 1];
+                }
+
+                return null;
+            }
+
+            bool HasFlag(string longName) => normalizedArgs.Any(a => string.Equals(a, longName, StringComparison.OrdinalIgnoreCase));
+
+            static string[] SplitEmails(string? raw)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    return Array.Empty<string>();
+                }
+
+                return raw
+                    .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToArray();
+            }
+
+            static string[] SplitPaths(string? raw)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    return Array.Empty<string>();
+                }
+
+                return raw
+                    .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToArray();
+            }
+
+            static int? TryParseInt(string? raw)
+                => int.TryParse(raw, out var i) ? i : null;
+
+            var sender = GetArgValue("--sender") ?? GetEnv("ACS_SENDER") ?? string.Empty;
+            var to = SplitEmails(GetArgValue("--to") ?? GetEnv("ACS_TO"));
+            var cc = SplitEmails(GetArgValue("--cc") ?? GetEnv("ACS_CC"));
+            var bcc = SplitEmails(GetArgValue("--bcc") ?? GetEnv("ACS_BCC"));
+            var replyTo = SplitEmails(GetArgValue("--reply-to") ?? GetEnv("ACS_REPLY_TO"));
+            var attachments = SplitPaths(GetArgValue("--attach") ?? GetEnv("ACS_ATTACH"));
+
+            var subject = GetArgValue("--subject") ?? GetEnv("ACS_SUBJECT") ?? "Welcome to Azure Communication Service Email APIs";
+            var viewUrl = GetArgValue("--view-url") ?? GetEnv("ACS_VIEW_IN_BROWSER_URL") ?? "https://example.com/view-in-browser";
+
+            var pollIntervalMs = TryParseInt(GetArgValue("--poll-interval-ms") ?? GetEnv("ACS_POLL_INTERVAL_MS")) ?? 500;
+            var maxPollSeconds = TryParseInt(GetArgValue("--max-poll-seconds") ?? GetEnv("ACS_MAX_POLL_SECONDS")) ?? 60;
+            var repeatCount = TryParseInt(GetArgValue("--repeat") ?? GetArgValue("-r") ?? GetEnv("ACS_REPEAT_COUNT")) ?? 1;
+
+            var dryRun = HasFlag("--dry-run") || string.Equals(GetEnv("ACS_DRY_RUN"), "true", StringComparison.OrdinalIgnoreCase);
+
+            return new Options(
+                Sender: sender,
+                To: to,
+                Cc: cc,
+                Bcc: bcc,
+                ReplyTo: replyTo,
+                Attachments: attachments,
+                Subject: subject,
+                ViewInBrowserUrl: viewUrl,
+                PollInterval: TimeSpan.FromMilliseconds(Math.Max(1, pollIntervalMs)),
+                MaxPollTime: TimeSpan.FromSeconds(Math.Max(1, maxPollSeconds)),
+                RepeatCount: Math.Max(1, repeatCount),
+                DryRun: dryRun);
+        }
+
+        private static string InferContentTypeFromFileName(string fileName)
+        {
+            var ext = Path.GetExtension(fileName);
+            if (string.IsNullOrWhiteSpace(ext))
+            {
+                return "application/octet-stream";
+            }
+
+            return ext.ToLowerInvariant() switch
+            {
+                ".txt" => "text/plain",
+                ".csv" => "text/csv",
+                ".json" => "application/json",
+                ".xml" => "application/xml",
+                ".pdf" => "application/pdf",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".gif" => "image/gif",
+                ".zip" => "application/zip",
+                _ => "application/octet-stream"
+            };
+        }
+
+        private static async Task<(EmailAttachment[] Attachments, string[] Display)> LoadAttachmentsAsync(string[] inputPaths)
+        {
+            if (inputPaths.Length == 0)
+            {
+                return (Array.Empty<EmailAttachment>(), Array.Empty<string>());
+            }
+
+            var attachments = new List<EmailAttachment>(capacity: inputPaths.Length);
+            var display = new List<string>(capacity: inputPaths.Length);
+
+            foreach (var rawPath in inputPaths)
+            {
+                var path = rawPath.Trim().Trim('"');
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                if (!File.Exists(path))
+                {
+                    Log($"[WARN] Attachment file not found: {path}");
+                    continue;
+                }
+
+                var fileName = Path.GetFileName(path);
+                var contentType = InferContentTypeFromFileName(fileName);
+                var bytes = await File.ReadAllBytesAsync(path);
+                attachments.Add(new EmailAttachment(fileName, contentType, BinaryData.FromBytes(bytes)));
+                display.Add($"{fileName} ({bytes.Length} bytes, {contentType})");
+            }
+
+            return (attachments.ToArray(), display.ToArray());
+        }
+
+        private static EmailRecipients BuildRecipients(Options options)
+        {
+            EmailAddress[] to = options.To.Select(a => new EmailAddress(a)).ToArray();
+            EmailAddress[] cc = options.Cc.Select(a => new EmailAddress(a)).ToArray();
+            EmailAddress[] bcc = options.Bcc.Select(a => new EmailAddress(a)).ToArray();
+
+            return new EmailRecipients(
+                to: to,
+                cc: cc.Length > 0 ? cc : null,
+                bcc: bcc.Length > 0 ? bcc : null);
+        }
+
+        private static bool ValidateConfiguration(string sender, EmailRecipients recipients, string[] replyTo)
+        {
+            if (string.IsNullOrWhiteSpace(sender))
+            {
+                Log("[ERROR] Sender is required. Specify --sender or set ACS_SENDER.");
+                return false;
+            }
+
+            var toCount = recipients.To?.Count ?? 0;
+            if (toCount == 0)
+            {
+                Log("[ERROR] At least one To recipient is required. Specify --to or set ACS_TO.");
+                return false;
+            }
+
+            if (replyTo.Length == 0)
+            {
+                Log("[INFO] No Reply-To addresses specified (optional). Use --reply-to or ACS_REPLY_TO to set.");
+            }
+
+            return true;
+        }
+    }
+}

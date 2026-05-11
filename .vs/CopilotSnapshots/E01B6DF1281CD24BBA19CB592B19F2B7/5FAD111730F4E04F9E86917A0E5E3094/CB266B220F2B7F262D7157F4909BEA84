@@ -1,0 +1,18 @@
+﻿# Azure Communication Services
+COMMUNICATION_SERVICES_CONNECTION_STRING=
+
+# Email configuration (can also be provided via CLI)
+ACS_SENDER=DoNotReply@your-verified-domain.example
+ACS_TO=recipient1@contoso.com,recipient2@contoso.com
+ACS_CC=
+ACS_BCC=
+ACS_REPLY_TO=
+ACS_SUBJECT=Welcome to Azure Communication Service Email APIs
+ACS_VIEW_IN_BROWSER_URL=https://example.com/view-in-browser
+
+# Polling configuration
+ACS_POLL_INTERVAL_MS=500
+ACS_MAX_POLL_SECONDS=60
+
+# Optional
+ACS_DRY_RUN=true

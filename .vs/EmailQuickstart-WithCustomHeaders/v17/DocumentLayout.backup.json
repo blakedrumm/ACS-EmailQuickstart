@@ -1,0 +1,158 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Temp\\EmailQuickstart\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{6D2E6C34-033D-15AF-64E9-74AA3D5780A6}|EmailQuickstart-WithCustomHeaders.csproj|c:\\temp\\emailquickstart\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{6D2E6C34-033D-15AF-64E9-74AA3D5780A6}|EmailQuickstart-WithCustomHeaders.csproj|solutionrelative:program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{6D2E6C34-033D-15AF-64E9-74AA3D5780A6}|EmailQuickstart-WithCustomHeaders.csproj|c:\\temp\\emailquickstart\\emailquickstart-withcustomheaders.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{6D2E6C34-033D-15AF-64E9-74AA3D5780A6}|EmailQuickstart-WithCustomHeaders.csproj|solutionrelative:emailquickstart-withcustomheaders.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Temp\\EmailQuickstart\\obj\\Debug\\net9.0\\EmailQuickstart-WithReplyTo.AssemblyInfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:obj\\Debug\\net9.0\\EmailQuickstart-WithReplyTo.AssemblyInfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Temp\\EmailQuickstart\\Temp\\obj\\Release\\net9.0\\EmailQuickstart.AssemblyInfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:Temp\\obj\\Release\\net9.0\\EmailQuickstart.AssemblyInfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Temp\\EmailQuickstart\\Temp\\obj\\Release\\net9.0\\.NETCoreApp,Version=v9.0.AssemblyAttributes.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:Temp\\obj\\Release\\net9.0\\.NETCoreApp,Version=v9.0.AssemblyAttributes.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Temp\\EmailQuickstart\\Temp\\obj\\Debug\\net9.0\\EmailQuickstart.AssemblyInfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:Temp\\obj\\Debug\\net9.0\\EmailQuickstart.AssemblyInfo.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{6D2E6C34-033D-15AF-64E9-74AA3D5780A6}|EmailQuickstart-WithCustomHeaders.csproj|c:\\temp\\emailquickstart\\.env.example||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{6D2E6C34-033D-15AF-64E9-74AA3D5780A6}|EmailQuickstart-WithCustomHeaders.csproj|solutionrelative:.env.example||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{6D2E6C34-033D-15AF-64E9-74AA3D5780A6}|EmailQuickstart-WithCustomHeaders.csproj|c:\\temp\\emailquickstart\\readme.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}|",
+      "RelativeMoniker": "D:0:0:{6D2E6C34-033D-15AF-64E9-74AA3D5780A6}|EmailQuickstart-WithCustomHeaders.csproj|solutionrelative:readme.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}|"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 5,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{40ea2e6b-2121-4bb8-a43e-c83c04b51041}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "README.md",
+              "DocumentMoniker": "C:\\Temp\\EmailQuickstart\\README.md",
+              "RelativeDocumentMoniker": "README.md",
+              "ToolTip": "C:\\Temp\\EmailQuickstart\\README.md",
+              "RelativeToolTip": "README.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADoAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2026-01-13T16:35:12.196Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": ".env.example",
+              "DocumentMoniker": "C:\\Temp\\EmailQuickstart\\.env.example",
+              "RelativeDocumentMoniker": ".env.example",
+              "ToolTip": "C:\\Temp\\EmailQuickstart\\.env.example",
+              "RelativeToolTip": ".env.example",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-01-13T16:35:01.295Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Program.cs",
+              "DocumentMoniker": "C:\\Temp\\EmailQuickstart\\Program.cs",
+              "RelativeDocumentMoniker": "Program.cs",
+              "ToolTip": "C:\\Temp\\EmailQuickstart\\Program.cs",
+              "RelativeToolTip": "Program.cs",
+              "ViewState": "AgIAAGcCAAAAAAAAAADgv3cCAAAqAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-19T00:50:42.353Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "EmailQuickstart.AssemblyInfo.cs",
+              "DocumentMoniker": "C:\\Temp\\EmailQuickstart\\Temp\\obj\\Release\\net9.0\\EmailQuickstart.AssemblyInfo.cs",
+              "RelativeDocumentMoniker": "Temp\\obj\\Release\\net9.0\\EmailQuickstart.AssemblyInfo.cs",
+              "ToolTip": "C:\\Temp\\EmailQuickstart\\Temp\\obj\\Release\\net9.0\\EmailQuickstart.AssemblyInfo.cs",
+              "RelativeToolTip": "Temp\\obj\\Release\\net9.0\\EmailQuickstart.AssemblyInfo.cs",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-18T18:17:12.916Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": ".NETCoreApp,Version=v9.0.AssemblyAttributes.cs",
+              "DocumentMoniker": "C:\\Temp\\EmailQuickstart\\Temp\\obj\\Release\\net9.0\\.NETCoreApp,Version=v9.0.AssemblyAttributes.cs",
+              "RelativeDocumentMoniker": "Temp\\obj\\Release\\net9.0\\.NETCoreApp,Version=v9.0.AssemblyAttributes.cs",
+              "ToolTip": "C:\\Temp\\EmailQuickstart\\Temp\\obj\\Release\\net9.0\\.NETCoreApp,Version=v9.0.AssemblyAttributes.cs",
+              "RelativeToolTip": "Temp\\obj\\Release\\net9.0\\.NETCoreApp,Version=v9.0.AssemblyAttributes.cs",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-18T18:17:03.661Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "EmailQuickstart.AssemblyInfo.cs",
+              "DocumentMoniker": "C:\\Temp\\EmailQuickstart\\Temp\\obj\\Debug\\net9.0\\EmailQuickstart.AssemblyInfo.cs",
+              "RelativeDocumentMoniker": "Temp\\obj\\Debug\\net9.0\\EmailQuickstart.AssemblyInfo.cs",
+              "ToolTip": "C:\\Temp\\EmailQuickstart\\Temp\\obj\\Debug\\net9.0\\EmailQuickstart.AssemblyInfo.cs",
+              "RelativeToolTip": "Temp\\obj\\Debug\\net9.0\\EmailQuickstart.AssemblyInfo.cs",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-18T18:16:52.606Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "EmailQuickstart-WithReplyTo.AssemblyInfo.cs",
+              "DocumentMoniker": "C:\\Temp\\EmailQuickstart\\obj\\Debug\\net9.0\\EmailQuickstart-WithReplyTo.AssemblyInfo.cs",
+              "RelativeDocumentMoniker": "obj\\Debug\\net9.0\\EmailQuickstart-WithReplyTo.AssemblyInfo.cs",
+              "ToolTip": "C:\\Temp\\EmailQuickstart\\obj\\Debug\\net9.0\\EmailQuickstart-WithReplyTo.AssemblyInfo.cs",
+              "RelativeToolTip": "obj\\Debug\\net9.0\\EmailQuickstart-WithReplyTo.AssemblyInfo.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-11-18T18:14:38.145Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "EmailQuickstart-WithCustomHeaders.csproj",
+              "DocumentMoniker": "C:\\Temp\\EmailQuickstart\\EmailQuickstart-WithCustomHeaders.csproj",
+              "RelativeDocumentMoniker": "EmailQuickstart-WithCustomHeaders.csproj",
+              "ToolTip": "C:\\Temp\\EmailQuickstart\\EmailQuickstart-WithCustomHeaders.csproj",
+              "RelativeToolTip": "EmailQuickstart-WithCustomHeaders.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2025-11-18T18:14:17.056Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

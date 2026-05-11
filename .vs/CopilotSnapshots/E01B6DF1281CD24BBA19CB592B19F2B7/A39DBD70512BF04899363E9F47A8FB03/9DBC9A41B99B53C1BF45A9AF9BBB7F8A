@@ -1,0 +1,68 @@
+﻿# Azure Communication Services Email Quickstart (Console)
+
+Console sample for sending an email via **Azure Communication Services - Email** using the .NET SDK.
+
+## Prerequisites
+- .NET 9 SDK
+- An Azure Communication Services resource with Email enabled
+- A verified sender identity for your ACS resource
+
+## Configuration
+This sample reads configuration from **CLI arguments** (highest priority) and falls back to **environment variables**.
+
+On Windows interactive runs, if `COMMUNICATION_SERVICES_CONNECTION_STRING` is missing, the app opens the built-in **Environment Variables** dialog and waits until the variable is detected.
+
+Required:
+- `COMMUNICATION_SERVICES_CONNECTION_STRING`
+- Sender: `--sender` or `ACS_SENDER`
+- Recipient(s): `--to` or `ACS_TO`
+
+Optional:
+- `--cc` / `ACS_CC`
+- `--bcc` / `ACS_BCC`
+- `--reply-to` / `ACS_REPLY_TO`
+- `--subject` / `ACS_SUBJECT`
+- `--view-url` / `ACS_VIEW_IN_BROWSER_URL`
+- `--poll-interval-ms` / `ACS_POLL_INTERVAL_MS`
+- `--max-poll-seconds` / `ACS_MAX_POLL_SECONDS`
+- `--repeat` / `ACS_REPEAT_COUNT`
+- `--dry-run` / `ACS_DRY_RUN=true`
+
+## Examples
+
+### Dry run (recommended first)
+```powershell
+$env:COMMUNICATION_SERVICES_CONNECTION_STRING = "<your-acs-connection-string>"
+$env:ACS_SENDER = "DoNotReply@your-verified-domain.example"
+$env:ACS_TO = "you@contoso.com"
+
+dotnet run -- --dry-run
+```
+
+### Send an email (CLI overrides env)
+```powershell
+$env:COMMUNICATION_SERVICES_CONNECTION_STRING = "<your-acs-connection-string>"
+
+dotnet run -- \
+  --sender "DoNotReply@your-verified-domain.example" \
+  --to "you@contoso.com" \
+  --reply-to "support@contoso.com" \
+  --subject "ACS Email test"
+```
+
+### Non-interactive mode
+```powershell
+dotnet run -- --noninteractive --sender "DoNotReply@your-verified-domain.example" --to "you@contoso.com"
+```
+
+### Send the same email multiple times
+```powershell
+dotnet run -- --noninteractive --repeat 30 --sender "DoNotReply@your-verified-domain.example" --to "you@contoso.com"
+```
+
+## Notes
+- The sender must be a **verified email identity** on your ACS resource.
+- `--dry-run` builds the message and prints metadata but does not call the send API.
+- `--repeat` sends the configured message multiple times sequentially. Default is `1` and it implies non-interactive mode unless `--interactive` is also specified.
+- The connection string value is never echoed back to the console during interactive setup.
+- Recipient lists accept comma or semicolon separators.

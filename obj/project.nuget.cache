@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "dgSpecHash": "fxD00LR6uYs=",
+  "success": true,
+  "projectFilePath": "C:\\Temp\\EmailQuickstart\\EmailQuickstart-WithCustomHeaders.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\blakedrumm\\.nuget\\packages\\azure.communication.email\\1.1.0\\azure.communication.email.1.1.0.nupkg.sha512",
+    "C:\\Users\\blakedrumm\\.nuget\\packages\\azure.core\\1.49.0\\azure.core.1.49.0.nupkg.sha512",
+    "C:\\Users\\blakedrumm\\.nuget\\packages\\microsoft.bcl.asyncinterfaces\\8.0.0\\microsoft.bcl.asyncinterfaces.8.0.0.nupkg.sha512",
+    "C:\\Users\\blakedrumm\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.2\\microsoft.extensions.dependencyinjection.abstractions.8.0.2.nupkg.sha512",
+    "C:\\Users\\blakedrumm\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.3\\microsoft.extensions.logging.abstractions.8.0.3.nupkg.sha512",
+    "C:\\Users\\blakedrumm\\.nuget\\packages\\system.clientmodel\\1.7.0\\system.clientmodel.1.7.0.nupkg.sha512",
+    "C:\\Users\\blakedrumm\\.nuget\\packages\\system.memory.data\\8.0.1\\system.memory.data.8.0.1.nupkg.sha512"
+  ],
+  "logs": []
+}
